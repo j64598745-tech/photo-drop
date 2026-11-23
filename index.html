@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* UI Color Variables */
+        :root {
+            --primary: #1a73e8; --bg: #ffffff; --card: #ffffff;
+            --text: #202124; --muted: #5f6368; --status: #f1f3f4; --border: #dadce0;
+            --accent: #34a853; --error: #d93025;
+        }
+        /* Dark Mode Overrides */
+        [data-theme="dark"] {
+            --bg: #121212; --card: #1e1e1e; --text: #e8eaed; --muted: #9aa0a6;
+            --status: #2d2d2d; --border: #3c4043; --accent: #5bd27a; --error: #f28b82;
+        }
+
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; transition: 0.3s; }
+
+        .container { background: var(--card); width: 85%; max-width: 380px; padding: 30px; border-radius: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; position: relative; }
+
+        .theme-btn { position: absolute; top: 15px; right: 15px; background: var(--status); border: none; padding: 10px; border-radius: 50%; cursor: pointer; color: var(--text); font-size: 1rem; }
+
+        .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 8px; }
+
+        /* Action buttons */
+        .btn-main { background: var(--primary); color: white; border: none; padding: 18px; border-radius: 50px; font-size: 1.1rem; font-weight: bold; width: 100%; cursor: pointer; margin-top: 14px; box-shadow: 0 4px 12px rgba(26,115,232,0.3); transition: 0.2s; }
+        .btn-main:active { transform: scale(0.98); }
+        .btn-main:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: var(--status); color: var(--text); box-shadow: none; border: 1px solid var(--border); }
+
+        /* Status box and progress bar */
+        #status-area { margin-top: 20px; padding: 15px; border-radius: 14px; background: var(--status); min-height: 45px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #status-text.ok { color: var(--accent); font-weight: bold; }
+        #status-text.err { color: var(--error); font-weight: bold; }
+        progress { width: 100%; height: 8px; border-radius: 10px; appearance: none; display: none; margin-top: 10px; }
+        progress::-webkit-progress-bar { background-color: var(--border); border-radius: 10px; }
+        progress::-webkit-progress-value { background-color: var(--accent); border-radius: 10px; transition: width 0.3s; }
+
+        .gallery-link { margin-top: 25px; display: inline-block; font-size: 0.85rem; color: var(--primary); text-decoration: none; font-weight: 500; }
+    </style>
+</head>
+<body data-theme="light">
+
+<div class="container">
+    <button class="theme-btn" onclick="toggleTheme()" id="tBtn">🌙</button>
+
+    <div style="font-size: 3.5rem; margin-bottom: 10px;">📸</div>
+    <h2 style="margin:0;">Photo Drop</h2>
+    <p class="subtitle">Snap a photo or share from your gallery!</p>
+
+    <!-- Camera: opens the camera directly, one photo at a time -->
+    <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
+    <!-- Gallery: no capture, so the phone shows its photo picker; multiple allowed -->
+    <input type="file" id="galInput" accept="image/*" multiple style="display:none">
+
+    <button id="camBtn" class="btn-main" onclick="document.getElementById('camInput').click()">📷 Take Photo</button>
+    <button id="galBtn" class="btn-main btn-secondary" onclick="document.getElementById('galInput').click()">🖼️ Upload from Gallery</button>
+
+    <div id="status-area">
+        <div id="status-text">Ready</div>
+        <progress id="uploadBar" value="0" max="100"></progress>
+    </div>
+
+    <a href="https://drive.google.com/drive/u/0/folders/1_xZlTSFmKJf-ARZKsYXM0tYQrR7cKGo0?sort=13&direction=d&layout=grid"
+       target="_blank" class="gallery-link">
+       📂 View Community Album →
+    </a>
+</div>
+
+<script>
+    const camInput = document.getElementById('camInput');
+    const galInput = document.getElementById('galInput');
+    const camBtn = document.getElementById('camBtn');
+    const galBtn = document.getElementById('galBtn');
+    const statusText = document.getElementById('status-text');
+    const bar = document.getElementById('uploadBar');
+
+    const MAX_SIDE = 2500;                  // longest side after resizing (px)
+    const COMPRESS_OVER = 4 * 1024 * 1024;  // compress files bigger than 4 MB
+    const MAX_DATA_CHARS = 19 * 1024 * 1024; // must stay under the server limit
+
+    // ---------- Theme ----------
+    function setTheme(theme) {
+        document.body.setAttribute('data-theme', theme);
+        document.getElementById('tBtn').innerText = theme === 'dark' ? '☀️' : '🌙';
+    }
+    function toggleTheme() {
+        setTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    }
+    // Start from the phone's light/dark setting
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        setTheme('dark');
+    }
+
+    // ---------- UI helpers ----------
+    function setStatus(text, cls) {
+        statusText.textContent = text;
+        statusText.className = cls || '';
+    }
+    function setBusy(busy) {
+        camBtn.disabled = busy;
+        galBtn.disabled = busy;
+    }
+
+    // ---------- File handling ----------
+    function readAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = e => resolve(e.target.result);
+            r.onerror = () => reject(new Error('Could not read file'));
+            r.readAsDataURL(file);
+        });
+    }
+
+    function loadImage(src) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('Could not decode image'));
+            img.src = src;
+        });
+    }
+
+    // Resize so the longest side is at most MAX_SIDE, re-encode as JPEG
+    // (JPEG works on every phone; WebP encoding fails on iPhones).
+    async function compressImg(file) {
+        const img = await loadImage(await readAsDataURL(file));
+        let w = img.width, h = img.height;
+        const longest = Math.max(w, h);
+        if (longest > MAX_SIDE) {
+            const s = MAX_SIDE / longest;
+            w = Math.round(w * s);
+            h = Math.round(h * s);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        return canvas.toDataURL('image/jpeg', 0.85);
+    }
+
+    // Returns {data, name}. Compresses big files; falls back to the original if that fails.
+    async function prepare(file) {
+        if (file.size > COMPRESS_OVER) {
+            try {
+                return {
+                    data: await compressImg(file),
+                    name: file.name.replace(/\.\w+$/, '') + '.jpg'
+                };
+            } catch (e) { /* fall through and try the original */ }
+        }
+        return { data: await readAsDataURL(file), name: file.name };
+    }
+
+    // Wraps google.script.run in a promise with BOTH success and failure handlers
+    function sendToServer(data, name) {
+        return new Promise((resolve, reject) => {
+            google.script.run
+                .withSuccessHandler(res => (res && res.ok) ? resolve() : reject(new Error((res && res.error) || 'Upload failed')))
+                .withFailureHandler(err => reject(new Error((err && err.message) || 'Connection problem')))
+                .uploadFile(data, name);
+        });
+    }
+
+    // Uploads photos one at a time and reports progress
+    async function handleFiles(fileList) {
+        const files = Array.from(fileList);
+        if (!files.length) return;
+
+        setBusy(true);
+        bar.style.display = 'block';
+        bar.value = 0;
+
+        let done = 0, failed = 0;
+        const step = 100 / files.length;
+
+        for (let i = 0; i < files.length; i++) {
+            const label = files.length > 1 ? ` ${i + 1} of ${files.length}` : '';
+            try {
+                setStatus('Preparing photo' + label + '…');
+                bar.value = i * step + step * 0.3;
+                const { data, name } = await prepare(files[i]);
+
+                if (data.length > MAX_DATA_CHARS) throw new Error('Photo is too large');
+
+                setStatus('Uploading photo' + label + '…');
+                bar.value = i * step + step * 0.6;
+                await sendToServer(data, name);
+                done++;
+            } catch (e) {
+                failed++;
+            }
+            bar.value = (i + 1) * step;
+        }
+
+        if (failed === 0) {
+            setStatus(done === 1 ? '✅ Photo saved!' : `✅ ${done} photos saved!`, 'ok');
+        } else if (done === 0) {
+            setStatus('❌ Upload failed. Please try again.', 'err');
+        } else {
+            setStatus(`✅ ${done} saved, ❌ ${failed} failed. Try the failed ones again.`, 'err');
+        }
+
+        setBusy(false);
+        setTimeout(() => {
+            bar.style.display = 'none';
+            setStatus('Ready');
+        }, 4000);
+    }
+
+    // Copy the files first, then reset the input so the same photo can be picked again
+    function onPick(input) {
+        const files = Array.from(input.files);
+        input.value = '';
+        handleFiles(files);
+    }
+    camInput.addEventListener('change', () => onPick(camInput));
+    galInput.addEventListener('change', () => onPick(galInput));
+</script>
+</body>
+</html>
