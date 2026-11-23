@@ -80,6 +80,9 @@
     const COMPRESS_OVER = 4 * 1024 * 1024;  // compress files bigger than 4 MB
     const MAX_DATA_CHARS = 19 * 1024 * 1024; // must stay under the server limit
 
+    // Your Apps Script web app (the /exec link). Photos are POSTed here.
+    const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbwSM1yADjc8KzI-BlqjStJCYlRGo035g5YQ3Nifo2PQR92XNsGoiLpAZUmNKG2iRv_L8g/exec';
+
     // ---------- Theme ----------
     function setTheme(theme) {
         document.body.setAttribute('data-theme', theme);
@@ -153,14 +156,25 @@
         return { data: await readAsDataURL(file), name: file.name };
     }
 
-    // Wraps google.script.run in a promise with BOTH success and failure handlers
-    function sendToServer(data, name) {
-        return new Promise((resolve, reject) => {
-            google.script.run
-                .withSuccessHandler(res => (res && res.ok) ? resolve() : reject(new Error((res && res.error) || 'Upload failed')))
-                .withFailureHandler(err => reject(new Error((err && err.message) || 'Connection problem')))
-                .uploadFile(data, name);
-        });
+    // POSTs one photo to the Apps Script endpoint.
+    // No custom headers on purpose: the default text/plain body avoids a CORS preflight,
+    // which Apps Script cannot answer.
+    async function sendToServer(data, name) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 90000); // give up after 90 s
+        try {
+            const res = await fetch(UPLOAD_URL, {
+                method: 'POST',
+                body: JSON.stringify({ data: data, name: name }),
+                signal: controller.signal
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.error || 'Upload failed');
+        } catch (e) {
+            throw new Error(e.name === 'AbortError' ? 'Upload timed out' : (e.message || 'Connection problem'));
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     // Uploads photos one at a time and reports progress
