@@ -22,9 +22,24 @@
                box-shadow:0 10px 30px rgba(0,0,0,.1); text-align:center; position:relative; margin:20px 0; }
   .theme-btn { position:absolute; top:15px; right:15px; background:var(--status); border:none; padding:10px;
                border-radius:50%; cursor:pointer; color:var(--text); font-size:1rem; }
-  .logo { font-size:3.5rem; margin-bottom:6px; cursor:pointer; user-select:none; -webkit-user-select:none;
-          -webkit-tap-highlight-color:transparent; outline:none; border:none; background:none; box-shadow:none; }
+  .logo { display:block; width:fit-content; margin:0 auto 6px; font-size:3.5rem; line-height:1.15; cursor:default;
+          user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; touch-action:manipulation;
+          outline:none; border:none; background:none; box-shadow:none; }
   .logo:focus, .logo:active { outline:none; background:none; }
+  .tabs { display:flex; gap:6px; margin:4px 0 8px; }
+  .tab { flex:1; padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:var(--status); color:var(--text);
+         font-size:.85rem; font-weight:600; cursor:pointer; }
+  .tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .rv-tools { display:flex; gap:14px; flex-wrap:wrap; }
+  .rv-tools .btn-link { margin-top:0; padding:4px 0; }
+  .pcard.sel { outline:4px solid var(--primary); outline-offset:-4px; }
+  .pcard .tick { position:absolute; top:6px; left:6px; width:26px; height:26px; border-radius:50%; background:var(--primary); color:#fff;
+                 display:none; align-items:center; justify-content:center; font-weight:bold; }
+  .pcard.sel .tick { display:flex; }
+  .pcard .zoom { position:absolute; bottom:6px; right:6px; width:34px; height:34px; border-radius:50%; border:none;
+                 background:rgba(0,0,0,.6); color:#fff; cursor:pointer; font-size:1rem; }
+  .pcard .open { position:absolute; bottom:6px; left:6px; background:rgba(0,0,0,.65); color:#fff; font-size:.75rem;
+                 padding:4px 9px; border-radius:10px; text-decoration:none; }
   .cgrid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:8px 0 4px; }
   .cslot { text-align:center; padding:8px; border:1px solid var(--border); border-radius:12px; }
   .cprev { height:84px; display:flex; align-items:center; justify-content:center; font-size:.8rem; color:var(--muted); border-radius:8px;
@@ -183,6 +198,7 @@
 
   <div class="sheet hidden" id="adminPanel">
     <h3>Admin settings</h3>
+    <button class="btn-main btn-small" id="rvOpen" type="button" style="width:100%">🗂️ Review photos (approve / reject)</button>
 
     <div class="sec">Features</div>
     <label class="row"><span>Accept uploads (master switch)</span><input type="checkbox" class="switch" id="a_uploadsEnabled"></label>
@@ -244,6 +260,37 @@
       <button class="btn-main btn-secondary" id="aLock" type="button">🔒 Lock &amp; close</button>
       <button class="btn-main" id="aSave" type="button">Save settings</button>
     </div></div>
+  </div>
+</div>
+
+<!-- Review: approve / reject (opened from the admin panel) -->
+<div id="reviewOverlay" class="overlay hidden" style="z-index:75">
+  <div class="sheet">
+    <h3>Review photos</h3>
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="pending">Pending</button>
+      <button type="button" class="tab" data-tab="approved">Approved</button>
+      <button type="button" class="tab" data-tab="rejected">Rejected</button>
+    </div>
+    <div class="rv-tools">
+      <button type="button" class="btn-link" id="rvSelAll">Select all</button>
+      <button type="button" class="btn-link" id="rvClear">Clear</button>
+      <button type="button" class="btn-link" id="rvRefresh">Refresh</button>
+      <button type="button" class="btn-link" id="rvCount">Count</button>
+    </div>
+    <p class="note">Tap photos to select them. Approved photos are copied into the community album. Rejected ones stay private.</p>
+    <div class="grid" id="rvGrid"></div>
+    <button type="button" class="btn-main btn-secondary btn-small hidden" id="rvMore" style="margin:14px auto 0;display:block">Load more</button>
+  </div>
+  <div class="bar">
+    <div class="bar-inner">
+      <div id="rvStatus" class="note" style="text-align:center;margin:0 0 6px;min-height:1.2em"></div>
+      <div class="bar-row">
+        <button class="btn-main btn-secondary" id="rvClose" type="button">Back</button>
+        <button class="btn-main btn-secondary hidden" id="rvBtn2" type="button"></button>
+        <button class="btn-main" id="rvBtn1" type="button"></button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -487,7 +534,7 @@ function addFiles(files, src) {
   const room = Math.max(0, settings.maxBatch - items.length);
   let note = '';
   if (files.length > room) { note = 'Only ' + settings.maxBatch + ' photos can be uploaded at a time.'; files = files.slice(0, room); }
-  files.forEach(f => items.push({ file: f, url: URL.createObjectURL(f), id: makeId(f), state: 'ready', origDone: false, framedDone: false, canvas: null, noDecode: false, error: '' }));
+  files.forEach(f => items.push({ file: f, url: URL.createObjectURL(f), id: makeId(f), state: 'ready', origDone: false, framedDone: false, thumbDone: false, thumbData: null, myAdded: false, origName: '', canvas: null, noDecode: false, error: '' }));
   openPreview(note);
 }
 
@@ -504,9 +551,10 @@ function renderPreview() {
   items.forEach(it => {
     const card = document.createElement('div'); card.className = 'pcard' + (it.state === 'failed' ? ' failed' : '');
     const slot = document.createElement('div'); slot.style.width = '100%'; slot.textContent = 'Loading…'; card.appendChild(slot);
+    card.style.cursor = 'pointer'; card.onclick = () => openPreviewLightbox(it);
     if (!busy) {
       const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '✕'; x.setAttribute('aria-label', 'Remove');
-      x.onclick = () => removeItem(it); card.appendChild(x);
+      x.onclick = ev => { ev.stopPropagation(); removeItem(it); }; card.appendChild(x);
     }
     if (it.state === 'failed') { const b = document.createElement('div'); b.className = 'badge'; b.textContent = '❌ ' + (it.error || 'Failed'); card.appendChild(b); }
     it.slot = slot; grid.appendChild(card);
@@ -572,12 +620,11 @@ async function processItem(it, onStep) {
       data = await fileToDataURL(it.file);
     }
     onStep(0.3);
-    await sendUpload({ kind: 'original', id: id, name: it.file.name, data: data });
-    data = null; it.origDone = true;
+    const sent = await sendUpload({ kind: 'original', id: id, name: it.file.name, data: data });
+    it.origName = sent.name; data = null; it.origDone = true;
   }
 
   // 2) Framed copy
-  let thumb = null;
   if (settings.borderEnabled && img && !it.framedDone) {
     onStep(0.6);
     const canvas = drawFramed(img, FRAMED_MAX_SIDE, settings);
@@ -587,11 +634,16 @@ async function processItem(it, onStep) {
     it.framedDone = true;
   }
 
-  // 3) Small thumbnail for "My uploads"
-  if (img) {
-    try { thumb = drawFramed(img, 420, settings).toDataURL('image/jpeg', 0.72); } catch (e) {}
+  // 3) Small thumbnail: used by "My uploads" and by the admin review screen.
+  //    It is required, because the review list is built from these thumbnails.
+  if (!it.thumbDone) {
+    onStep(0.85);
+    let thumb = null;
+    if (img) { try { thumb = drawFramed(img, 420, settings).toDataURL('image/jpeg', 0.72); } catch (e) {} }
+    await sendUpload({ kind: 'thumb', id: it.id, orig: it.origName, framed: it.framedDone, data: thumb || placeholderThumb() });
+    it.thumbDone = true; it.thumbData = thumb;
   }
-  if (thumb) addMy({ t: Date.now(), thumb: thumb });
+  if (it.thumbData && !it.myAdded) { addMy({ t: Date.now(), thumb: it.thumbData }); it.myAdded = true; }
 }
 
 async function uploadAll() {
@@ -656,11 +708,19 @@ $('myClear').onclick = () => { if (confirm('Clear this list? Your photos stay sa
 $('lightbox').onclick = () => show('lightbox', false);
 
 // ============================ ADMIN ============================
-$('logo').onclick = () => {
+function openAdminLogin() {
   $('pinInput').value = ''; $('loginErr').textContent = '';
   show('adminLogin', true); show('adminPanel', false); show('adminBar', false);
   show('adminOverlay', true);
   setTimeout(() => $('pinInput').focus(), 50);
+}
+// Two quick taps (or clicks) on the camera emoji are needed; one does nothing.
+let lastLogoTap = 0;
+$('logo').onclick = () => {
+  const now = Date.now();
+  if (now - lastLogoTap > 500) { lastLogoTap = now; return; }
+  lastLogoTap = 0;
+  openAdminLogin();
 };
 $('loginCancel').onclick = () => show('adminOverlay', false);
 
@@ -741,7 +801,8 @@ $('aPinBtn').onclick = async () => {
   } catch (e) { adminMsg(e.message || 'Could not change the PIN', 'err'); }
 };
 $('aLock').onclick = () => {
-  adminPin = null; $('a_newPin').value = ''; show('adminOverlay', false); fetchSettings();
+  adminPin = null; $('a_newPin').value = ''; show('reviewOverlay', false); show('adminOverlay', false);
+  RV.items = []; RV.sel.clear(); fetchSettings();
 };
 
 // ============================ CORNER IMAGES ============================
@@ -810,6 +871,113 @@ $('cornerFile').addEventListener('change', async () => {
     afterCornerChange(r); adminMsg('Corner saved ✓', 'ok');
   } catch (e) { adminMsg(e.message || 'Could not upload that image', 'err'); }
 });
+
+// ============================ PREVIEW ENLARGE / PLACEHOLDER ============================
+async function openPreviewLightbox(it) {
+  if (it.noDecode) return;
+  try {
+    const img = await loadImage(it.url);
+    $('lbImg').src = drawFramed(img, 1400, settings).toDataURL('image/jpeg', 0.9);
+    show('lightbox', true);
+  } catch (e) { /* ignore */ }
+}
+function placeholderThumb() {          // used when the phone cannot decode the photo (for example HEIC on a PC)
+  const c = document.createElement('canvas'); c.width = 420; c.height = 315;
+  const x = c.getContext('2d'); x.fillStyle = '#9aa0a6'; x.fillRect(0, 0, 420, 315);
+  x.fillStyle = '#ffffff'; x.font = 'bold 28px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('No preview', 210, 157);
+  return c.toDataURL('image/jpeg', 0.7);
+}
+
+// ============================ REVIEW: APPROVE / REJECT ============================
+const RV = { tab: 'pending', items: [], sel: new Set(), token: null, busy: false, counts: {} };
+const RV_ACTIONS = {
+  pending:  [['✔ Approve', 'approved'], ['✖ Reject', 'rejected']],
+  approved: [['↩ Remove from album', 'pending'], null],
+  rejected: [['✔ Approve', 'approved'], ['↩ Back to pending', 'pending']]
+};
+const RV_NAMES = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' };
+
+function rvStatus(t, cls) {
+  const el = $('rvStatus'); el.textContent = t;
+  el.style.color = cls === 'err' ? 'var(--error)' : cls === 'ok' ? 'var(--accent)' : '';
+}
+function rvButtons() {
+  const n = RV.sel.size, cfg = RV_ACTIONS[RV.tab], b1 = $('rvBtn1'), b2 = $('rvBtn2');
+  b1.textContent = cfg[0][0] + ' (' + n + ')'; b1.disabled = RV.busy || !n;
+  show('rvBtn2', !!cfg[1]);
+  if (cfg[1]) { b2.textContent = cfg[1][0] + ' (' + n + ')'; b2.disabled = RV.busy || !n; }
+  document.querySelectorAll('#reviewOverlay .tab').forEach(t => {
+    const c = RV.counts[t.dataset.tab];
+    t.classList.toggle('active', t.dataset.tab === RV.tab);
+    t.textContent = RV_NAMES[t.dataset.tab] + (c !== undefined ? ' (' + c + ')' : '');
+  });
+}
+function rvRender() {
+  const grid = $('rvGrid'); grid.textContent = '';
+  RV.items.forEach(it => {
+    const card = document.createElement('div'); card.className = 'pcard' + (RV.sel.has(it.id) ? ' sel' : '');
+    const img = document.createElement('img'); img.src = it.thumb; img.alt = ''; card.appendChild(img);
+    const tick = document.createElement('div'); tick.className = 'tick'; tick.textContent = '✓'; card.appendChild(tick);
+    const z = document.createElement('button'); z.type = 'button'; z.className = 'zoom'; z.textContent = '🔍';
+    z.onclick = ev => { ev.stopPropagation(); $('lbImg').src = it.thumb; show('lightbox', true); }; card.appendChild(z);
+    if (it.url) {
+      const a = document.createElement('a'); a.className = 'open'; a.href = it.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = 'Open'; a.onclick = ev => ev.stopPropagation(); card.appendChild(a);
+    }
+    card.onclick = () => { if (RV.sel.has(it.id)) RV.sel.delete(it.id); else RV.sel.add(it.id); card.classList.toggle('sel', RV.sel.has(it.id)); rvButtons(); };
+    grid.appendChild(card);
+  });
+  show('rvMore', !!RV.token);
+  rvButtons();
+}
+async function rvLoad(reset) {
+  if (RV.busy) return;
+  RV.busy = true; rvButtons(); rvStatus('Loading…');
+  try {
+    const r = await postJSON({ action: 'adminList', pin: adminPin, state: RV.tab, limit: 24, token: reset ? null : RV.token }, 120000);
+    if (reset) { RV.items = []; RV.sel.clear(); }
+    RV.items = RV.items.concat(r.items); RV.token = r.nextToken || null;
+    rvStatus(RV.items.length ? '' : 'Nothing here yet.');
+  } catch (e) { rvStatus(e.message || 'Could not load', 'err'); }
+  RV.busy = false; rvRender();
+}
+async function rvAct(to) {
+  const ids = Array.from(RV.sel);
+  if (!ids.length || RV.busy) return;
+  RV.busy = true; rvButtons();
+  let done = 0, failed = 0, err = '';
+  try {
+    for (let i = 0; i < ids.length; i += 10) {
+      rvStatus('Working… ' + Math.min(i + 10, ids.length) + ' of ' + ids.length);
+      const r = await postJSON({ action: 'adminReview', pin: adminPin, from: RV.tab, to: to, ids: ids.slice(i, i + 10) }, 240000);
+      done += r.done; failed += r.failed;
+    }
+  } catch (e) { err = e.message || 'Something went wrong'; }
+  RV.busy = false;
+  await rvLoad(true);
+  if (err) rvStatus(err, 'err'); else rvStatus('Done: ' + done + (failed ? ', ' + failed + ' failed' : ''), failed ? 'err' : 'ok');
+}
+document.querySelectorAll('#reviewOverlay .tab').forEach(t => {
+  t.onclick = () => { if (RV.busy) return; RV.tab = t.dataset.tab; RV.items = []; RV.sel.clear(); RV.token = null; rvLoad(true); };
+});
+$('rvOpen').onclick = () => { RV.tab = 'pending'; RV.items = []; RV.sel.clear(); RV.token = null; show('reviewOverlay', true); rvLoad(true); };
+$('rvClose').onclick = () => show('reviewOverlay', false);
+$('rvBtn1').onclick = () => rvAct(RV_ACTIONS[RV.tab][0][1]);
+$('rvBtn2').onclick = () => { if (RV_ACTIONS[RV.tab][1]) rvAct(RV_ACTIONS[RV.tab][1][1]); };
+$('rvSelAll').onclick = () => { RV.items.forEach(i => RV.sel.add(i.id)); rvRender(); };
+$('rvClear').onclick = () => { RV.sel.clear(); rvRender(); };
+$('rvRefresh').onclick = () => rvLoad(true);
+$('rvMore').onclick = () => rvLoad(false);
+$('rvCount').onclick = async () => {
+  rvStatus('Counting…');
+  try {
+    const r = await postJSON({ action: 'adminReviewStats', pin: adminPin }, 120000);
+    const f = x => x.count + (x.capped ? '+' : '');
+    RV.counts = { pending: f(r.pending), approved: f(r.approved), rejected: f(r.rejected) };
+    rvStatus(''); rvButtons();
+  } catch (e) { rvStatus(e.message || 'Could not count', 'err'); }
+};
 
 // ============================ START ============================
 applySettings();
