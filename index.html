@@ -22,7 +22,19 @@
                box-shadow:0 10px 30px rgba(0,0,0,.1); text-align:center; position:relative; margin:20px 0; }
   .theme-btn { position:absolute; top:15px; right:15px; background:var(--status); border:none; padding:10px;
                border-radius:50%; cursor:pointer; color:var(--text); font-size:1rem; }
-  .logo { font-size:3.5rem; margin-bottom:6px; cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; }
+  .logo { font-size:3.5rem; margin-bottom:6px; cursor:pointer; user-select:none; -webkit-user-select:none;
+          -webkit-tap-highlight-color:transparent; outline:none; border:none; background:none; box-shadow:none; }
+  .logo:focus, .logo:active { outline:none; background:none; }
+  .cgrid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:8px 0 4px; }
+  .cslot { text-align:center; padding:8px; border:1px solid var(--border); border-radius:12px; }
+  .cprev { height:84px; display:flex; align-items:center; justify-content:center; font-size:.8rem; color:var(--muted); border-radius:8px;
+           background-color:#fff;
+           background-image:linear-gradient(45deg,#ddd 25%,transparent 25%,transparent 75%,#ddd 75%),linear-gradient(45deg,#ddd 25%,transparent 25%,transparent 75%,#ddd 75%);
+           background-size:16px 16px; background-position:0 0,8px 8px; }
+  .cprev img { max-width:100%; max-height:100%; }
+  .clabel { font-size:.8rem; font-weight:600; margin:6px 0 4px; }
+  .cslot .btn-small { width:100%; padding:8px; font-size:.85rem; margin-top:0; }
+  .cslot .btn-link { margin-top:2px; padding:4px; font-size:.8rem; color:var(--error); }
   h2 { margin:0; }
   .event-line { color:var(--primary); font-weight:600; font-size:.9rem; margin-top:6px; }
   .subtitle { color:var(--muted); font-size:.9rem; margin:8px 0 0; }
@@ -100,7 +112,7 @@
 <div class="container">
   <button class="theme-btn" id="tBtn" type="button">🌙</button>
 
-  <div class="logo" id="logo" role="button" aria-label="Photo Drop logo">📸</div>
+  <div class="logo" id="logo">📸</div>
   <h2>Photo Drop</h2>
   <div class="event-line hidden" id="eventLine"></div>
   <p class="subtitle" id="subtitle">Snap a photo or share from your gallery!</p>
@@ -182,10 +194,23 @@
     <div class="sec">Border and caption</div>
     <label class="row"><span>Add event border</span><input type="checkbox" class="switch" id="a_borderEnabled"></label>
     <label class="row"><span>Style</span>
-      <select id="a_borderStyle"><option value="thin">Thin white</option><option value="polaroid">Polaroid</option><option value="color">Solid color</option></select></label>
+      <select id="a_borderStyle"><option value="thin">Thin white</option><option value="polaroid">Polaroid</option><option value="color">Solid color</option><option value="corners">Custom corners</option></select></label>
     <label class="row"><span>Frame color (solid color style)</span><input type="color" id="a_borderColor"></label>
     <label class="row"><span>Event name</span><input type="text" id="a_eventName" maxlength="60"></label>
     <label class="row"><span>Event date</span><input type="text" id="a_eventDate" maxlength="40" placeholder="e.g. Nov 28, 2026"></label>
+    <div class="note">Custom corners: upload up to four images (a PNG with a transparent background works best). Empty corners are mirrored from the top-left one, so a single image is enough.</div>
+    <div class="cgrid">
+      <div class="cslot"><div class="cprev" id="cprev_tl">Empty</div><div class="clabel">Top left</div>
+        <button type="button" class="btn-main btn-secondary btn-small cup" data-k="tl">Upload</button><button type="button" class="btn-link crm" data-k="tl">Remove</button></div>
+      <div class="cslot"><div class="cprev" id="cprev_tr">Empty</div><div class="clabel">Top right</div>
+        <button type="button" class="btn-main btn-secondary btn-small cup" data-k="tr">Upload</button><button type="button" class="btn-link crm" data-k="tr">Remove</button></div>
+      <div class="cslot"><div class="cprev" id="cprev_bl">Empty</div><div class="clabel">Bottom left</div>
+        <button type="button" class="btn-main btn-secondary btn-small cup" data-k="bl">Upload</button><button type="button" class="btn-link crm" data-k="bl">Remove</button></div>
+      <div class="cslot"><div class="cprev" id="cprev_br">Empty</div><div class="clabel">Bottom right</div>
+        <button type="button" class="btn-main btn-secondary btn-small cup" data-k="br">Upload</button><button type="button" class="btn-link crm" data-k="br">Remove</button></div>
+    </div>
+    <input type="file" id="cornerFile" accept="image/png,image/webp,image/jpeg" style="display:none">
+    <label class="row"><span>Corner size (% of photo)</span><input type="number" id="a_cornerSizePct" min="8" max="40"></label>
     <div id="aPreview"></div>
 
     <div class="sec">Text</div>
@@ -234,13 +259,15 @@ const MY_MAX = 40;                // thumbnails kept in "My uploads"
 
 const DEFAULT_SETTINGS = {
   uploadsEnabled: true, cameraEnabled: true, galleryEnabled: true, showMyUploads: true, showAlbumLink: true,
-  borderEnabled: true, borderStyle: 'polaroid', borderColor: '#1a73e8', eventName: '', eventDate: '',
+  borderEnabled: true, borderStyle: 'polaroid', borderColor: '#1a73e8', cornerSizePct: 22, corners: {}, cornersVersion: '0',
+  eventName: '', eventDate: '',
   subtitle: 'Snap a photo or share from your gallery!', maxOriginalMB: 10, maxBatch: 20, minFreeGB: 10,
   albumUrl: 'https://drive.google.com/drive/folders/1_xZlTSFmKJf-ARZKsYXM0tYQrR7cKGo0?sort=13&direction=d&layout=grid'
 };
 const BOOL_KEYS = ['uploadsEnabled','cameraEnabled','galleryEnabled','showMyUploads','showAlbumLink','borderEnabled'];
 const TEXT_KEYS = ['borderStyle','borderColor','eventName','eventDate','subtitle'];
-const NUM_KEYS  = ['maxOriginalMB','maxBatch','minFreeGB'];
+const NUM_KEYS  = ['maxOriginalMB','maxBatch','minFreeGB','cornerSizePct'];
+const CORNER_KEYS = ['tl','tr','bl','br'];
 const MIME_BY_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp', heic:'image/heic', heif:'image/heif', gif:'image/gif' };
 
 const $ = id => document.getElementById(id);
@@ -253,6 +280,8 @@ let source = 'camera';   // which input the guest used last
 let busy = false;
 let adminPin = null;     // lives only in memory, never saved
 let lastFrameKey = '';
+const cornerImgs = { tl: null, tr: null, bl: null, br: null };   // loaded corner images (Image objects)
+let cornersLoadedVersion = null, cornersLoading = null, pendingCorner = null;
 
 // ============================ THEME ============================
 function setTheme(t) { document.body.setAttribute('data-theme', t); $('tBtn').textContent = t === 'dark' ? '☀️' : '🌙'; }
@@ -360,7 +389,8 @@ function applySettings() {
   show('albumLink', !!(s.showAlbumLink && s.albumUrl));
   if (s.albumUrl) $('albumLink').href = s.albumUrl;
 
-  const key = [s.borderEnabled, s.borderStyle, s.borderColor, s.eventName, s.eventDate].join('|');
+  if (s.borderEnabled && s.borderStyle === 'corners') fetchCorners();
+  const key = [s.borderEnabled, s.borderStyle, s.borderColor, s.cornerSizePct, s.cornersVersion, s.eventName, s.eventDate].join('|');
   if (key !== lastFrameKey) {
     lastFrameKey = key;
     items.forEach(it => { it.canvas = null; });
@@ -377,11 +407,42 @@ function contrastColor(hex) {
 function frameGeometry(w, h, s) {
   const m = Math.min(w, h), cap = !!captionText(s);
   if (!s.borderEnabled) return { pad: 0, bottom: 0, bg: '#ffffff', fg: '#222', caption: false, style: 'none' };
+  if (s.borderStyle === 'corners') return { pad: 0, bottom: 0, bg: '#ffffff', fg: '#ffffff', caption: cap, style: 'corners' };
   if (s.borderStyle === 'polaroid')
     return { pad: Math.round(m * 0.05), bottom: Math.round(m * (cap ? 0.17 : 0.05)), bg: '#ffffff', fg: '#222222', caption: cap, style: 'polaroid' };
   if (s.borderStyle === 'color')
     return { pad: Math.round(m * 0.035), bottom: Math.round(m * (cap ? 0.10 : 0.035)), bg: s.borderColor, fg: contrastColor(s.borderColor), caption: cap, style: 'color' };
   return { pad: Math.round(m * 0.02), bottom: Math.round(m * (cap ? 0.08 : 0.02)), bg: '#ffffff', fg: '#222222', caption: cap, style: 'thin' };
+}
+// Draws the uploaded corner images over the photo. Empty corners are mirrored from the top-left image.
+function drawCorners(ctx, w, h, s) {
+  const size = Math.round(Math.min(w, h) * (Number(s.cornerSizePct) || 22) / 100);
+  const dim = img => { const r = img.width / img.height; return r >= 1 ? [size, size / r] : [size * r, size]; };
+  const mirror = (img, ax, ay, sx, sy) => {
+    const d = dim(img); ctx.save(); ctx.translate(ax, ay); ctx.scale(sx, sy); ctx.drawImage(img, 0, 0, d[0], d[1]); ctx.restore();
+  };
+  const C = cornerImgs;
+  if (C.tl) { const d = dim(C.tl); ctx.drawImage(C.tl, 0, 0, d[0], d[1]); }
+  if (C.tr) { const d = dim(C.tr); ctx.drawImage(C.tr, w - d[0], 0, d[0], d[1]); } else if (C.tl) mirror(C.tl, w, 0, -1, 1);
+  if (C.bl) { const d = dim(C.bl); ctx.drawImage(C.bl, 0, h - d[1], d[0], d[1]); } else if (C.tl) mirror(C.tl, 0, h, 1, -1);
+  if (C.br) { const d = dim(C.br); ctx.drawImage(C.br, w - d[0], h - d[1], d[0], d[1]); } else if (C.tl) mirror(C.tl, w, h, -1, -1);
+}
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+// Small caption bar used by the corners style (the other styles have a caption area in the frame).
+function drawCaptionPill(ctx, w, h, s) {
+  const text = captionText(s), m = Math.min(w, h);
+  let fs = Math.max(12, Math.round(m * 0.04));
+  const font = size => 'bold ' + size + 'px system-ui, sans-serif';
+  ctx.font = font(fs);
+  while (fs > 9 && ctx.measureText(text).width > w * 0.6) { fs -= 1; ctx.font = font(fs); }
+  const tw = ctx.measureText(text).width, px = fs * 0.9, py = fs * 0.55;
+  const bw = tw + px * 2, bh = fs + py * 2, x = (w - bw) / 2, y = h - bh - m * 0.03;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; roundRectPath(ctx, x, y, bw, bh, bh / 2); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, w / 2, y + bh / 2);
 }
 // img can be an <img> or a <canvas>. Returns a canvas with the photo (scaled down if needed) plus the border.
 function drawFramed(img, maxSide, s) {
@@ -395,7 +456,8 @@ function drawFramed(img, maxSide, s) {
   ctx.fillStyle = g.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, g.pad, g.pad, w, h);
-  if (g.caption) {
+  if (g.style === 'corners') { drawCorners(ctx, w, h, s); if (g.caption) drawCaptionPill(ctx, w, h, s); }
+  if (g.caption && g.style !== 'corners') {
     const text = captionText(s);
     let fs = Math.max(10, Math.round(g.bottom * (g.style === 'polaroid' ? 0.30 : 0.45)));
     const fontFor = size => (g.style === 'polaroid' ? 'italic 600 ' : 'bold ') + size + 'px ' + (g.style === 'polaroid' ? 'Georgia, "Times New Roman", serif' : 'system-ui, sans-serif');
@@ -535,6 +597,14 @@ async function processItem(it, onStep) {
 async function uploadAll() {
   if (busy || !items.length) return;
   busy = true; renderPreview();
+  if (settings.borderEnabled && settings.borderStyle === 'corners') {
+    setPStatus('Loading border…');
+    if (!(await fetchCorners())) {
+      busy = false; renderPreview();
+      setPStatus('Could not load the border. Check your connection and tap Upload again.', 'err');
+      return;
+    }
+  }
   show('pBar', true);
   const todo = items.filter(i => i.state !== 'done');
   let ok = 0, fail = 0;
@@ -604,6 +674,8 @@ $('loginForm').onsubmit = async ev => {
     adminPin = pin; $('pinInput').value = '';
     fillAdmin(r);
     show('adminLogin', false); show('adminPanel', true); show('adminBar', true);
+    settings = Object.assign({}, DEFAULT_SETTINGS, r.settings);
+    fetchCorners(true).then(() => { updateCornerSlots(); renderAdminPreview(); });
     $('loginErr').textContent = '';
   } catch (e) { $('loginErr').textContent = e.message || 'Could not check the PIN'; }
   $('loginGo').disabled = false;
@@ -637,7 +709,7 @@ function renderAdminPreview() {
   const out = drawFramed(sample, 520, Object.assign({}, settings, collectAdmin()));
   const box = $('aPreview'); box.textContent = ''; box.appendChild(out);
 }
-['a_borderEnabled','a_borderStyle','a_borderColor','a_eventName','a_eventDate'].forEach(id => {
+['a_borderEnabled','a_borderStyle','a_borderColor','a_cornerSizePct','a_eventName','a_eventDate'].forEach(id => {
   $(id).addEventListener('input', renderAdminPreview); $(id).addEventListener('change', renderAdminPreview);
 });
 
@@ -671,6 +743,73 @@ $('aPinBtn').onclick = async () => {
 $('aLock').onclick = () => {
   adminPin = null; $('a_newPin').value = ''; show('adminOverlay', false); fetchSettings();
 };
+
+// ============================ CORNER IMAGES ============================
+async function fetchCorners(force) {
+  const ver = String(settings.cornersVersion || '0');
+  const any = settings.corners && CORNER_KEYS.some(k => settings.corners[k]);
+  if (!any) { CORNER_KEYS.forEach(k => { cornerImgs[k] = null; }); cornersLoadedVersion = ver; return true; }
+  if (!force && cornersLoadedVersion === ver) return true;
+  if (cornersLoading) return cornersLoading;
+  cornersLoading = (async () => {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=corners&t=' + Date.now(), { cache: 'no-store' });
+      const json = await res.json();
+      if (!json || !json.ok) return false;
+      for (const k of CORNER_KEYS) cornerImgs[k] = json.corners[k] ? await loadImage(json.corners[k]) : null;
+      cornersLoadedVersion = String(json.version || '0');
+      items.forEach(i => { i.canvas = null; });
+      if (!busy && !$('previewOverlay').classList.contains('hidden')) renderPreview();
+      return true;
+    } catch (e) { return false; }
+    finally { cornersLoading = null; }
+  })();
+  return cornersLoading;
+}
+
+function updateCornerSlots() {
+  CORNER_KEYS.forEach(k => {
+    const box = $('cprev_' + k); box.textContent = '';
+    if (cornerImgs[k]) { const im = document.createElement('img'); im.src = cornerImgs[k].src; box.appendChild(im); }
+    else box.textContent = 'Empty';
+  });
+}
+function afterCornerChange(r) {
+  settings.corners = r.settings.corners; settings.cornersVersion = r.settings.cornersVersion;
+  cornersLoadedVersion = String(r.settings.cornersVersion);   // our local images are already current
+  updateCornerSlots(); renderAdminPreview();
+}
+document.querySelectorAll('.cup').forEach(b => { b.onclick = () => { pendingCorner = b.dataset.k; $('cornerFile').click(); }; });
+document.querySelectorAll('.crm').forEach(b => {
+  b.onclick = async () => {
+    const k = b.dataset.k;
+    try {
+      const r = await postJSON({ action: 'adminCornerRemove', pin: adminPin, corner: k }, 30000);
+      cornerImgs[k] = null; afterCornerChange(r); adminMsg('Corner removed ✓', 'ok');
+    } catch (e) { adminMsg(e.message || 'Could not remove', 'err'); }
+  };
+});
+$('cornerFile').addEventListener('change', async () => {
+  const f = $('cornerFile').files[0], k = pendingCorner;
+  $('cornerFile').value = '';
+  if (!f || !k) return;
+  adminMsg('Uploading corner…');
+  try {
+    const url = URL.createObjectURL(f);
+    const img = await loadImage(url); URL.revokeObjectURL(url);
+    let side = 600, data;
+    do {                                   // shrink until it is small enough to send
+      const sc = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * sc)); c.height = Math.max(1, Math.round(img.naturalHeight * sc));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      data = c.toDataURL('image/png'); side = Math.round(side * 0.75);
+    } while (data.length > 1400000 && side > 120);
+    const r = await postJSON({ action: 'adminCorner', pin: adminPin, corner: k, data: data }, 60000);
+    cornerImgs[k] = await loadImage(data);
+    afterCornerChange(r); adminMsg('Corner saved ✓', 'ok');
+  } catch (e) { adminMsg(e.message || 'Could not upload that image', 'err'); }
+});
 
 // ============================ START ============================
 applySettings();
