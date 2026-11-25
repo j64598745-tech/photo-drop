@@ -120,15 +120,35 @@
   #loginErr, #aMsg.err { color:var(--error); font-weight:600; }
   #aMsg.ok { color:var(--accent); font-weight:600; }
   a.alink { color:var(--primary); font-weight:600; font-size:.9rem; text-decoration:none; }
+  /* Christmas theme */
+  body[data-style="christmas"] { --primary:#c62828; --accent:#2e7d32; --bg:#fff6ee; --card:#ffffff; --status:#fdecea; --border:#efc4c0; --flake:#8ab6e6; }
+  body[data-style="christmas"][data-theme="dark"] { --primary:#e53935; --accent:#66bb6a; --bg:#0d1c13; --card:#14281c; --text:#f3efe6;
+                                                    --muted:#b9c9bd; --status:#1d3a28; --border:#2f5a40; --flake:#ffffff; }
+  body[data-style="christmas"] .container { border-top:6px solid var(--primary); box-shadow:0 10px 30px rgba(198,40,40,.18); }
+  body[data-style="christmas"] .btn-main:not(.btn-secondary) { box-shadow:0 4px 12px rgba(198,40,40,.35); }
+  body[data-style="christmas"] .event-line { color:var(--accent); }
+  .garland { font-size:1.1rem; letter-spacing:.25em; margin-top:2px; }
+  #snow { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:40; }
+  .flake { position:absolute; top:-6%; color:var(--flake,#8ab6e6); opacity:.85; text-shadow:0 0 3px rgba(0,0,0,.25); animation:fall linear infinite; }
+  @keyframes fall { to { transform:translate(24px,112vh) rotate(180deg); } }
+  @media (prefers-reduced-motion: reduce) { #snow { display:none; } }
+
+  /* Event code screen */
+  .gate-card { max-width:360px; margin:12vh auto 0; padding:28px 24px; text-align:center; }
+  #gateErr { font-size:.9rem; min-height:1.2em; margin-top:8px; color:var(--error); font-weight:600; }
+  .gate-card input { text-align:center; letter-spacing:.2em; font-size:1.2rem; text-transform:uppercase; }
+  .container.loading { visibility:hidden; }
 </style>
 </head>
-<body data-theme="light">
+<body data-theme="light" data-style="default">
+<div id="snow" aria-hidden="true"></div>
 
-<div class="container">
+<div class="container" id="mainCard">
   <button class="theme-btn" id="tBtn" type="button">🌙</button>
 
   <div class="logo" id="logo">📸</div>
-  <h2>Photo Drop</h2>
+  <h2 id="appTitle">Photo Drop</h2>
+  <div class="garland hidden" id="garland" aria-hidden="true">🎄 ✨ 🎁 ✨ 🎄</div>
   <div class="event-line hidden" id="eventLine"></div>
   <p class="subtitle" id="subtitle">Snap a photo or share from your gallery!</p>
 
@@ -144,6 +164,20 @@
   <div id="status-area"><div id="status-text">Ready</div></div>
 
   <a id="albumLink" class="gallery-link hidden" target="_blank" rel="noopener">📂 View Community Album →</a>
+</div>
+
+<!-- Event code screen -->
+<div id="gate" class="overlay hidden" style="z-index:65">
+  <div class="gate-card">
+    <div class="logo" id="gateLogo">📸</div>
+    <h2 id="gateTitle">Photo Drop</h2>
+    <p class="subtitle">Enter the event code to continue</p>
+    <form id="gateForm" autocomplete="off">
+      <div class="field"><input type="text" id="gateInput" autocomplete="off" autocapitalize="characters" maxlength="12" placeholder="CODE"></div>
+      <button class="btn-main" id="gateGo" type="submit">Enter</button>
+      <div id="gateErr"></div>
+    </form>
+  </div>
 </div>
 
 <!-- Preview before upload -->
@@ -206,6 +240,17 @@
     <label class="row"><span>🖼️ Gallery upload button</span><input type="checkbox" class="switch" id="a_galleryEnabled"></label>
     <label class="row"><span>🗂️ My uploads list</span><input type="checkbox" class="switch" id="a_showMyUploads"></label>
     <label class="row"><span>📂 Community album link</span><input type="checkbox" class="switch" id="a_showAlbumLink"></label>
+
+    <div class="sec">Access</div>
+    <label class="row"><span>🔐 Require event code to open</span><input type="checkbox" class="switch" id="a_codeRequired"></label>
+    <label class="row"><span>Event code</span><input type="text" id="a_accessCode" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="4-12 letters or numbers"></label>
+    <button class="btn-main btn-secondary btn-small" id="aCodeGen" type="button" style="width:100%;margin-top:8px">Make a random code</button>
+    <p class="note">Guests type this code once on their phone. Turn it on for the event day, off when you don't need it. If you change the code, guests are asked again.</p>
+
+    <div class="sec">Look</div>
+    <label class="row"><span>Site name</span><input type="text" id="a_appName" maxlength="40"></label>
+    <label class="row"><span>Theme</span><select id="a_theme"><option value="default">Default</option><option value="christmas">Christmas 🎄</option></select></label>
+    <label class="row"><span>❄️ Falling snow (Christmas)</span><input type="checkbox" class="switch" id="a_snow"></label>
 
     <div class="sec">Border and caption</div>
     <label class="row"><span>Add event border</span><input type="checkbox" class="switch" id="a_borderEnabled"></label>
@@ -307,12 +352,12 @@ const MY_MAX = 40;                // thumbnails kept in "My uploads"
 const DEFAULT_SETTINGS = {
   uploadsEnabled: true, cameraEnabled: true, galleryEnabled: true, showMyUploads: true, showAlbumLink: true,
   borderEnabled: true, borderStyle: 'polaroid', borderColor: '#1a73e8', cornerSizePct: 22, corners: {}, cornersVersion: '0',
-  eventName: '', eventDate: '',
+  eventName: '', eventDate: '', appName: 'Photo Drop', theme: 'default', snow: true, codeRequired: false,
   subtitle: 'Snap a photo or share from your gallery!', maxOriginalMB: 10, maxBatch: 20, minFreeGB: 10,
   albumUrl: 'https://drive.google.com/drive/folders/1_xZlTSFmKJf-ARZKsYXM0tYQrR7cKGo0?sort=13&direction=d&layout=grid'
 };
-const BOOL_KEYS = ['uploadsEnabled','cameraEnabled','galleryEnabled','showMyUploads','showAlbumLink','borderEnabled'];
-const TEXT_KEYS = ['borderStyle','borderColor','eventName','eventDate','subtitle'];
+const BOOL_KEYS = ['uploadsEnabled','cameraEnabled','galleryEnabled','showMyUploads','showAlbumLink','borderEnabled','codeRequired','snow'];
+const TEXT_KEYS = ['borderStyle','borderColor','eventName','eventDate','subtitle','appName','theme'];
 const NUM_KEYS  = ['maxOriginalMB','maxBatch','minFreeGB','cornerSizePct'];
 const CORNER_KEYS = ['tl','tr','bl','br'];
 const MIME_BY_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp', heic:'image/heic', heif:'image/heif', gif:'image/gif' };
@@ -327,6 +372,7 @@ let source = 'camera';   // which input the guest used last
 let busy = false;
 let adminPin = null;     // lives only in memory, never saved
 let lastFrameKey = '';
+let accessChecked = false;
 const cornerImgs = { tl: null, tr: null, bl: null, br: null };   // loaded corner images (Image objects)
 let cornersLoadedVersion = null, cornersLoading = null, pendingCorner = null;
 
@@ -381,7 +427,7 @@ async function postJSON(body, timeoutMs) {
     const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), signal: ctrl.signal });
     let json;
     try { json = await res.json(); } catch (e) { throw new Error('Server busy, please retry'); }
-    if (!json.ok) { const err = new Error(json.error || 'Request failed'); err.fatal = true; throw err; }
+    if (!json.ok) { const err = new Error(json.error || 'Request failed'); err.fatal = true; err.needCode = !!json.needCode; throw err; }
     return json;
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('Timed out');
@@ -394,7 +440,7 @@ async function sendUpload(payload) {
   let lastErr;
   for (const w of waits) {
     if (w) await sleep(w + Math.random() * 1000);
-    try { return await postJSON(Object.assign({ action: 'upload' }, payload), 180000); }
+    try { return await postJSON(Object.assign({ action: 'upload', token: tokenStored() }, payload), 180000); }
     catch (e) { lastErr = e; if (e.fatal) throw e; }   // server said no: do not retry
   }
   throw lastErr;
@@ -417,7 +463,7 @@ async function fetchSettings() {
       applySettings();
     }
   } catch (e) { /* keep the last known settings */ }
-  finally { clearTimeout(timer); }
+  finally { clearTimeout(timer); $('mainCard').classList.remove('loading'); }
 }
 
 function captionText(s) { return [s.eventName, s.eventDate].filter(Boolean).join('  •  '); }
@@ -430,6 +476,16 @@ function applySettings() {
   show('paused', !(camOn || galOn));
   $('paused').textContent = s.uploadsEnabled ? 'Uploads are not available right now.' : 'Uploads are paused right now. Please check back soon.';
   $('subtitle').textContent = s.subtitle;
+  // name, theme, snow
+  const name = s.appName || 'Photo Drop';
+  $('appTitle').textContent = name; $('gateTitle').textContent = name; document.title = name;
+  const xmas = s.theme === 'christmas';
+  document.body.setAttribute('data-style', xmas ? 'christmas' : 'default');
+  show('garland', xmas);
+  if (xmas && s.snow) startSnow(); else stopSnow();
+  // event code screen
+  if (!s.codeRequired) { show('gate', false); accessChecked = false; }
+  else if (!accessChecked) { accessChecked = true; ensureAccess(); }
   const cap = captionText(s);
   $('eventLine').textContent = cap; show('eventLine', !!cap);
   show('myBtn', !!s.showMyUploads);
@@ -659,18 +715,22 @@ async function uploadAll() {
   }
   show('pBar', true);
   const todo = items.filter(i => i.state !== 'done');
-  let ok = 0, fail = 0;
+  let ok = 0, fail = 0, codeProblem = false;
   for (let i = 0; i < todo.length; i++) {
     const it = todo[i], label = todo.length > 1 ? ' ' + (i + 1) + ' of ' + todo.length : '';
     const step = f => { $('pBar').value = ((i + f) / todo.length) * 100; setPStatus('Uploading photo' + label + '…'); };
     try { await processItem(it, step); it.state = 'done'; ok++; }
-    catch (e) { it.state = 'failed'; it.error = e.message || 'Failed'; fail++; }
+    catch (e) { it.state = 'failed'; it.error = e.message || 'Failed'; fail++; if (e.needCode) { codeProblem = true; break; } }
     $('pBar').value = ((i + 1) / todo.length) * 100;
   }
   busy = false;
   items.filter(i => i.state === 'done').forEach(i => URL.revokeObjectURL(i.url));
-  items = items.filter(i => i.state === 'failed');
+  items = items.filter(i => i.state !== 'done');
   renderMy();
+  if (codeProblem) {                       // the code changed: ask again, keep the photos in the list
+    accessChecked = false; try { localStorage.removeItem('pd_token'); } catch (e) {}
+    showGate('The event code changed. Please enter it again.');
+  }
   if (!fail) {
     closePreview();
     setStatus(ok === 1 ? '✅ Photo saved!' : '✅ ' + ok + ' photos saved!', 'ok');
@@ -716,12 +776,14 @@ function openAdminLogin() {
 }
 // Two quick taps (or clicks) on the camera emoji are needed; one does nothing.
 let lastLogoTap = 0;
-$('logo').onclick = () => {
+function onLogoTap() {
   const now = Date.now();
   if (now - lastLogoTap > 500) { lastLogoTap = now; return; }
   lastLogoTap = 0;
   openAdminLogin();
-};
+}
+$('logo').onclick = onLogoTap;
+$('gateLogo').onclick = onLogoTap;     // the admin can also get in from the code screen
 $('loginCancel').onclick = () => show('adminOverlay', false);
 
 $('loginForm').onsubmit = async ev => {
@@ -735,6 +797,7 @@ $('loginForm').onsubmit = async ev => {
     fillAdmin(r);
     show('adminLogin', false); show('adminPanel', true); show('adminBar', true);
     settings = Object.assign({}, DEFAULT_SETTINGS, r.settings);
+    if (r.token && settings.codeRequired) { try { localStorage.setItem('pd_token', r.token); } catch (e) {} accessChecked = true; show('gate', false); }
     fetchCorners(true).then(() => { updateCornerSlots(); renderAdminPreview(); });
     $('loginErr').textContent = '';
   } catch (e) { $('loginErr').textContent = e.message || 'Could not check the PIN'; }
@@ -749,6 +812,7 @@ function fillAdmin(r) {
   $('lnkInbox').href = r.inboxUrl; $('lnkFramed').href = r.framedUrl; $('lnkOriginals').href = r.originalsUrl; $('lnkAlbum').href = r.albumFolderUrl;
   $('aStorage').textContent = r.freeGB === null ? 'Drive: ' + r.usedGB + ' GB used (no limit reported)'
     : 'Drive: ' + r.usedGB + ' GB used, ' + r.freeGB + ' GB free of ' + r.limitGB + ' GB';
+  $('a_accessCode').value = r.accessCode || '';
   $('aStats').textContent = ''; $('aMsg').textContent = ''; $('aMsg').className = '';
   renderAdminPreview();
 }
@@ -776,9 +840,11 @@ function renderAdminPreview() {
 $('aSave').onclick = async () => {
   adminMsg('Saving…'); $('aSave').disabled = true;
   try {
-    const r = await postJSON({ action: 'adminSave', pin: adminPin, settings: collectAdmin() }, 30000);
+    const r = await postJSON({ action: 'adminSave', pin: adminPin, settings: collectAdmin(), accessCode: $('a_accessCode').value }, 30000);
     settings = Object.assign({}, DEFAULT_SETTINGS, r.settings);
     try { localStorage.setItem('pd_settings', JSON.stringify(settings)); } catch (e) {}
+    $('a_accessCode').value = r.accessCode || '';
+    if (r.token && settings.codeRequired) { try { localStorage.setItem('pd_token', r.token); } catch (e) {} accessChecked = true; show('gate', false); }
     applySettings();
     adminMsg('Saved ✓ Guests will see the changes within a minute.', 'ok');
   } catch (e) { adminMsg(e.message || 'Could not save', 'err'); }
@@ -979,7 +1045,54 @@ $('rvCount').onclick = async () => {
   } catch (e) { rvStatus(e.message || 'Could not count', 'err'); }
 };
 
+// ============================ EVENT CODE SCREEN ============================
+function tokenStored() { try { return localStorage.getItem('pd_token') || ''; } catch (e) { return ''; } }
+function showGate(msg) {
+  if (!settings.codeRequired) return;
+  $('gateErr').textContent = msg || ''; show('gate', true);
+  setTimeout(() => { try { $('gateInput').focus(); } catch (e) {} }, 50);
+}
+async function ensureAccess() {
+  if (!settings.codeRequired) { show('gate', false); return; }
+  const t = tokenStored();
+  if (!t) { showGate(); return; }
+  try { await postJSON({ action: 'checkCode', token: t }, 20000); show('gate', false); }
+  catch (e) {
+    if (e.fatal) { try { localStorage.removeItem('pd_token'); } catch (x) {} showGate(); }
+    else show('gate', false);               // no connection right now: the server still checks every upload
+  }
+}
+$('gateForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const code = $('gateInput').value.trim();
+  if (!code) return;
+  $('gateGo').disabled = true; $('gateErr').textContent = 'Checking…';
+  try {
+    const r = await postJSON({ action: 'checkCode', code: code }, 20000);
+    try { localStorage.setItem('pd_token', r.token || ''); } catch (e) {}
+    $('gateInput').value = ''; $('gateErr').textContent = ''; accessChecked = true; show('gate', false);
+  } catch (e) { $('gateErr').textContent = e.message || 'Could not check the code'; }
+  $('gateGo').disabled = false;
+};
+$('aCodeGen').onclick = () => { $('a_accessCode').value = String(Math.floor(100000 + Math.random() * 900000)); };
+
+// ============================ SNOW ============================
+function startSnow() {
+  const box = $('snow');
+  if (box.children.length) return;
+  for (let i = 0; i < 28; i++) {
+    const f = document.createElement('span'); f.className = 'flake'; f.textContent = '❄';
+    f.style.left = (Math.random() * 100) + '%'; f.style.fontSize = (10 + Math.random() * 14) + 'px';
+    f.style.animationDuration = (9 + Math.random() * 10) + 's'; f.style.animationDelay = (-Math.random() * 14) + 's';
+    box.appendChild(f);
+  }
+}
+function stopSnow() { $('snow').textContent = ''; }
+
 // ============================ START ============================
+try {   // first visit on this phone: keep the card hidden until the settings arrive (max 5 s)
+  if (!localStorage.getItem('pd_settings')) { $('mainCard').classList.add('loading'); setTimeout(() => $('mainCard').classList.remove('loading'), 5000); }
+} catch (e) {}
 applySettings();
 renderMy();
 fetchSettings();
