@@ -133,6 +133,22 @@
   @keyframes fall { to { transform:translate(24px,112vh) rotate(180deg); } }
   @media (prefers-reduced-motion: reduce) { #snow { display:none; } }
 
+  /* Help icons, album, requests */
+  .help { display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border:1.5px solid var(--muted);
+          border-radius:50%; font-size:.68rem; font-weight:700; color:var(--muted); margin-left:6px; cursor:help; font-style:normal;
+          user-select:none; -webkit-user-select:none; vertical-align:middle; flex:none; }
+  #tip { position:fixed; z-index:95; max-width:240px; background:#202124; color:#fff; padding:8px 10px; border-radius:8px;
+         font-size:.8rem; line-height:1.35; box-shadow:0 4px 14px rgba(0,0,0,.35); pointer-events:none; text-align:left; }
+  .req { display:flex; gap:10px; padding:12px 0; border-bottom:1px solid var(--border); }
+  .req.done { opacity:.55; }
+  .req img, .req .noimg { width:84px; height:84px; object-fit:cover; border-radius:8px; background:var(--status); flex:none; }
+  .req .meta { flex:1; font-size:.9rem; min-width:0; word-break:break-word; }
+  .req .acts { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; }
+  .req .acts button { padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:var(--status); color:var(--text); cursor:pointer; font-size:.85rem; }
+  #avControls { margin-top:12px; }
+  #avControls input { width:100%; padding:11px; border-radius:10px; border:1px solid #666; background:#222; color:#fff; font-size:.95rem; margin-bottom:8px; }
+  #avControls .btn-main { margin-top:0; }
+
   /* Event code screen */
   .gate-card { max-width:360px; margin:12vh auto 0; padding:28px 24px; text-align:center; }
   #gateErr { font-size:.9rem; min-height:1.2em; margin-top:8px; color:var(--error); font-weight:600; }
@@ -163,7 +179,8 @@
 
   <div id="status-area"><div id="status-text">Ready</div></div>
 
-  <a id="albumLink" class="gallery-link hidden" target="_blank" rel="noopener">📂 View Community Album →</a>
+  <button id="albumBtn" class="btn-link hidden" type="button">📂 Community Album</button>
+  <a id="albumLink" class="gallery-link hidden" target="_blank" rel="noopener">📁 Open the Drive folder →</a>
 </div>
 
 <!-- Event code screen -->
@@ -205,6 +222,7 @@
   <div class="sheet">
     <h3>My uploads</h3>
     <p class="note">Photos you uploaded from this phone, with the event border. Tap one to enlarge.</p>
+    <p class="note hidden" id="myNotice"></p>
     <div class="grid" id="myGrid"></div>
   </div>
   <div class="bar">
@@ -215,6 +233,46 @@
   </div>
 </div>
 <div id="lightbox" class="overlay hidden" style="z-index:80"><img id="lbImg" alt=""></div>
+
+<!-- Community album (approved photos) -->
+<div id="albumOverlay" class="overlay hidden">
+  <div class="sheet">
+    <h3>📂 Community Album</h3>
+    <p class="note hidden" id="alNotice"></p>
+    <div class="grid" id="alGrid"></div>
+    <div id="alStatus" class="note" style="text-align:center"></div>
+    <button type="button" class="btn-main btn-secondary btn-small hidden" id="alMore" style="margin:12px auto 0;display:block">Load more</button>
+  </div>
+  <div class="bar"><div class="bar-inner"><div class="bar-row">
+    <button class="btn-main" id="alClose" type="button">Close</button>
+  </div></div></div>
+</div>
+<div id="albumViewer" class="overlay hidden" style="z-index:85; background:rgba(0,0,0,.94); color:#fff">
+  <div class="sheet" style="text-align:center">
+    <img id="avImg" alt="" style="max-width:100%; max-height:58vh; border-radius:8px; margin-top:10px">
+    <p class="note hidden" id="avNotice" style="color:#cfd3d8"></p>
+    <div id="avControls"></div>
+    <div id="avStatus" class="note" style="color:#cfd3d8"></div>
+  </div>
+  <div class="bar"><div class="bar-inner"><div class="bar-row">
+    <button class="btn-main btn-secondary" id="avClose" type="button">Close</button>
+  </div></div></div>
+</div>
+
+<!-- Download requests (admin) -->
+<div id="requestsOverlay" class="overlay hidden" style="z-index:75">
+  <div class="sheet">
+    <h3>Download requests</h3>
+    <p class="note">Guests who asked for a photo. Send them the original yourself (for example a Drive link), then tap Done.</p>
+    <div id="rqList"></div>
+    <div id="rqStatus" class="note" style="text-align:center"></div>
+  </div>
+  <div class="bar"><div class="bar-inner"><div class="bar-row">
+    <button class="btn-main btn-secondary" id="rqRefresh" type="button">Refresh</button>
+    <button class="btn-main" id="rqClose" type="button">Back</button>
+  </div></div></div>
+</div>
+<div id="tip" class="hidden" role="tooltip"></div>
 
 <!-- Admin -->
 <div id="adminOverlay" class="overlay hidden" style="z-index:70">
@@ -233,32 +291,38 @@
   <div class="sheet hidden" id="adminPanel">
     <h3>Admin settings</h3>
     <button class="btn-main btn-small" id="rvOpen" type="button" style="width:100%">🗂️ Review photos (approve / reject)</button>
+    <button class="btn-main btn-secondary btn-small" id="rqOpen" type="button" style="width:100%;margin-top:8px">🙋 Download requests</button>
 
     <div class="sec">Features</div>
-    <label class="row"><span>Accept uploads (master switch)</span><input type="checkbox" class="switch" id="a_uploadsEnabled"></label>
-    <label class="row"><span>📷 Camera button</span><input type="checkbox" class="switch" id="a_cameraEnabled"></label>
-    <label class="row"><span>🖼️ Gallery upload button</span><input type="checkbox" class="switch" id="a_galleryEnabled"></label>
-    <label class="row"><span>🗂️ My uploads list</span><input type="checkbox" class="switch" id="a_showMyUploads"></label>
-    <label class="row"><span>📂 Community album link</span><input type="checkbox" class="switch" id="a_showAlbumLink"></label>
+    <label class="row"><span>Accept uploads (master switch) <i class="help" data-tip="Master switch. Turn it off to pause all uploads. Guests will see an uploads are paused message.">?</i></span><input type="checkbox" class="switch" id="a_uploadsEnabled"></label>
+    <label class="row"><span>📷 Camera button <i class="help" data-tip="Shows or hides the Take Photo button on the guest page.">?</i></span><input type="checkbox" class="switch" id="a_cameraEnabled"></label>
+    <label class="row"><span>🖼️ Gallery upload button <i class="help" data-tip="Shows or hides the Upload from Gallery button, which lets guests pick photos they already have.">?</i></span><input type="checkbox" class="switch" id="a_galleryEnabled"></label>
+    <label class="row"><span>🗂️ My uploads list <i class="help" data-tip="Gives each guest a list of the photos they uploaded from their own phone. It is stored only on that phone.">?</i></span><input type="checkbox" class="switch" id="a_showMyUploads"></label>
+    <label class="row"><span>📂 Community album (in the site) <i class="help" data-tip="Shows a Community Album button on the guest page. It displays the photos you have approved in Review.">?</i></span><input type="checkbox" class="switch" id="a_showAlbum"></label>
+    <label class="row"><span>📁 Drive folder link (extra) <i class="help" data-tip="Also shows a link that opens your Google Drive album folder. Usually not needed when the in-site album is on.">?</i></span><input type="checkbox" class="switch" id="a_showAlbumLink"></label>
+
+    <div class="sec">Album and downloads</div>
+    <label class="row"><span>Guest downloads <i class="help" data-tip="Off: guests can only look. By request: guests send you a request and you follow up. Anyone can save: guests download the framed copy themselves.">?</i></span><select id="a_downloadMode"><option value="off">Off (view only)</option><option value="request">By request</option><option value="anyone">Anyone can save</option></select></label>
+    <label class="row"><span>Notice text <i class="help" data-tip="A short message shown with the photos, for example that they are reduced-size previews. Leave it empty to hide it.">?</i></span><input type="text" id="a_albumNotice" maxlength="240"></label>
 
     <div class="sec">Access</div>
-    <label class="row"><span>🔐 Require event code to open</span><input type="checkbox" class="switch" id="a_codeRequired"></label>
-    <label class="row"><span>Event code</span><input type="text" id="a_accessCode" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="4-12 letters or numbers"></label>
+    <label class="row"><span>🔐 Require event code to open <i class="help" data-tip="When on, guests must type the event code before they can use the site. Turn it off if you do not need it.">?</i></span><input type="checkbox" class="switch" id="a_codeRequired"></label>
+    <label class="row"><span>Event code <i class="help" data-tip="The code guests type. Use 4 to 12 letters or numbers. Changing it asks everyone to enter it again.">?</i></span><input type="text" id="a_accessCode" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="4-12 letters or numbers"></label>
     <button class="btn-main btn-secondary btn-small" id="aCodeGen" type="button" style="width:100%;margin-top:8px">Make a random code</button>
     <p class="note">Guests type this code once on their phone. Turn it on for the event day, off when you don't need it. If you change the code, guests are asked again.</p>
 
     <div class="sec">Look</div>
-    <label class="row"><span>Site name</span><input type="text" id="a_appName" maxlength="40"></label>
-    <label class="row"><span>Theme</span><select id="a_theme"><option value="default">Default</option><option value="christmas">Christmas 🎄</option></select></label>
-    <label class="row"><span>❄️ Falling snow (Christmas)</span><input type="checkbox" class="switch" id="a_snow"></label>
+    <label class="row"><span>Site name <i class="help" data-tip="The name shown at the top of the page, on the code screen and in the browser tab.">?</i></span><input type="text" id="a_appName" maxlength="40"></label>
+    <label class="row"><span>Theme <i class="help" data-tip="Changes the colors and decorations of the whole site. Christmas adds red and green colors and a garland.">?</i></span><select id="a_theme"><option value="default">Default</option><option value="christmas">Christmas 🎄</option></select></label>
+    <label class="row"><span>❄️ Falling snow (Christmas) <i class="help" data-tip="Falling snowflakes on the guest page. Only used with the Christmas theme, and hidden for people who prefer reduced motion.">?</i></span><input type="checkbox" class="switch" id="a_snow"></label>
 
     <div class="sec">Border and caption</div>
-    <label class="row"><span>Add event border</span><input type="checkbox" class="switch" id="a_borderEnabled"></label>
-    <label class="row"><span>Style</span>
+    <label class="row"><span>Add event border <i class="help" data-tip="Adds the event border to the framed copy of every new photo. The original is always saved untouched.">?</i></span><input type="checkbox" class="switch" id="a_borderEnabled"></label>
+    <label class="row"><span>Style <i class="help" data-tip="Thin white, Polaroid, solid color, or your own corner images. The preview below shows how it will look.">?</i></span>
       <select id="a_borderStyle"><option value="thin">Thin white</option><option value="polaroid">Polaroid</option><option value="color">Solid color</option><option value="corners">Custom corners</option></select></label>
-    <label class="row"><span>Frame color (solid color style)</span><input type="color" id="a_borderColor"></label>
-    <label class="row"><span>Event name</span><input type="text" id="a_eventName" maxlength="60"></label>
-    <label class="row"><span>Event date</span><input type="text" id="a_eventDate" maxlength="40" placeholder="e.g. Nov 28, 2026"></label>
+    <label class="row"><span>Frame color (solid color style) <i class="help" data-tip="The frame color. Only used by the Solid color style.">?</i></span><input type="color" id="a_borderColor"></label>
+    <label class="row"><span>Event name <i class="help" data-tip="Printed in the caption area of the border, for example Maria's Christmas Party.">?</i></span><input type="text" id="a_eventName" maxlength="60"></label>
+    <label class="row"><span>Event date <i class="help" data-tip="Printed next to the event name in the caption. Type it in any format, for example Dec 24, 2026.">?</i></span><input type="text" id="a_eventDate" maxlength="40" placeholder="e.g. Nov 28, 2026"></label>
     <div class="note">Custom corners: upload up to four images (a PNG with a transparent background works best). Empty corners are mirrored from the top-left one, so a single image is enough.</div>
     <div class="cgrid">
       <div class="cslot"><div class="cprev" id="cprev_tl">Empty</div><div class="clabel">Top left</div>
@@ -271,16 +335,19 @@
         <button type="button" class="btn-main btn-secondary btn-small cup" data-k="br">Upload</button><button type="button" class="btn-link crm" data-k="br">Remove</button></div>
     </div>
     <input type="file" id="cornerFile" accept="image/png,image/webp,image/jpeg" style="display:none">
-    <label class="row"><span>Corner size (% of photo)</span><input type="number" id="a_cornerSizePct" min="8" max="40"></label>
+    <label class="row"><span>Corner size (% of photo) <i class="help" data-tip="How big the corner images are, as a percent of the photo's shorter side. 15 to 25 usually looks best.">?</i></span><input type="number" id="a_cornerSizePct" min="8" max="40"></label>
     <div id="aPreview"></div>
 
     <div class="sec">Text</div>
-    <label class="row"><span>Subtitle</span><input type="text" id="a_subtitle" maxlength="100"></label>
+    <label class="row"><span>Subtitle <i class="help" data-tip="The short line under the title on the guest page.">?</i></span><input type="text" id="a_subtitle" maxlength="100"></label>
 
     <div class="sec">Limits</div>
-    <label class="row"><span>Max original size (MB)</span><input type="number" id="a_maxOriginalMB" min="2" max="25"></label>
-    <label class="row"><span>Max photos per upload</span><input type="number" id="a_maxBatch" min="1" max="50"></label>
-    <label class="row"><span>Stop uploads below (GB free)</span><input type="number" id="a_minFreeGB" min="1" max="50"></label>
+    <label class="row"><span>Max original size (MB) <i class="help" data-tip="Originals bigger than this are saved as a large resized copy (marked _RESIZED). Bigger limits can fail on weak connections.">?</i></span><input type="number" id="a_maxOriginalMB" min="2" max="25"></label>
+    <label class="row"><span>Max photos per upload <i class="help" data-tip="How many photos a guest can send in one go.">?</i></span><input type="number" id="a_maxBatch" min="1" max="50"></label>
+    <label class="row"><span>Stop uploads below (GB free) <i class="help" data-tip="Uploads stop automatically when your Google Drive has less free space than this.">?</i></span><input type="number" id="a_minFreeGB" min="1" max="50"></label>
+    <label class="row"><span>Framed copy size (px) <i class="help" data-tip="Longest side, in pixels, of the framed copy. Bigger is sharper but slower to upload and uses more Drive space. 2400 is a good balance.">?</i></span><input type="number" id="a_framedMaxSide" min="1200" max="3600" step="100"></label>
+    <label class="row"><span>Framed copy quality (%) <i class="help" data-tip="JPEG quality of the framed copy, from 60 to 95. Higher is sharper and bigger. 85 to 90 is a good balance.">?</i></span><input type="number" id="a_framedQuality" min="60" max="95"></label>
+    <p class="note">Only the framed copy uses these two. Originals are never changed. Applies to photos uploaded after you save.</p>
     <p class="note">Originals above the size limit are saved as a large resized copy (marked _RESIZED).</p>
 
     <div class="sec">Storage and folders</div>
@@ -350,15 +417,17 @@ const BIG_RESIZE_SIDE = 4000;     // used only when an original is above the siz
 const MY_MAX = 40;                // thumbnails kept in "My uploads"
 
 const DEFAULT_SETTINGS = {
-  uploadsEnabled: true, cameraEnabled: true, galleryEnabled: true, showMyUploads: true, showAlbumLink: true,
+  uploadsEnabled: true, cameraEnabled: true, galleryEnabled: true, showMyUploads: true, showAlbum: true, showAlbumLink: false,
   borderEnabled: true, borderStyle: 'polaroid', borderColor: '#1a73e8', cornerSizePct: 22, corners: {}, cornersVersion: '0',
   eventName: '', eventDate: '', appName: 'Photo Drop', theme: 'default', snow: true, codeRequired: false,
+  downloadMode: 'off', framedMaxSide: 2400, framedQuality: 88,
+  albumNotice: 'These are reduced-size previews. The organizers keep the originals in full quality - ask them if you need one.',
   subtitle: 'Snap a photo or share from your gallery!', maxOriginalMB: 10, maxBatch: 20, minFreeGB: 10,
   albumUrl: 'https://drive.google.com/drive/folders/1_xZlTSFmKJf-ARZKsYXM0tYQrR7cKGo0?sort=13&direction=d&layout=grid'
 };
-const BOOL_KEYS = ['uploadsEnabled','cameraEnabled','galleryEnabled','showMyUploads','showAlbumLink','borderEnabled','codeRequired','snow'];
-const TEXT_KEYS = ['borderStyle','borderColor','eventName','eventDate','subtitle','appName','theme'];
-const NUM_KEYS  = ['maxOriginalMB','maxBatch','minFreeGB','cornerSizePct'];
+const BOOL_KEYS = ['uploadsEnabled','cameraEnabled','galleryEnabled','showMyUploads','showAlbum','showAlbumLink','borderEnabled','codeRequired','snow'];
+const TEXT_KEYS = ['borderStyle','borderColor','eventName','eventDate','subtitle','appName','theme','downloadMode','albumNotice'];
+const NUM_KEYS  = ['maxOriginalMB','maxBatch','minFreeGB','cornerSizePct','framedMaxSide','framedQuality'];
 const CORNER_KEYS = ['tl','tr','bl','br'];
 const MIME_BY_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp', heic:'image/heic', heif:'image/heif', gif:'image/gif' };
 
@@ -489,7 +558,11 @@ function applySettings() {
   const cap = captionText(s);
   $('eventLine').textContent = cap; show('eventLine', !!cap);
   show('myBtn', !!s.showMyUploads);
+  show('albumBtn', !!s.showAlbum);
   show('albumLink', !!(s.showAlbumLink && s.albumUrl));
+  const note = s.albumNotice || '';
+  ['myNotice', 'alNotice', 'avNotice'].forEach(id => { $(id).textContent = note; show(id, !!note); });
+  $('pNote').textContent = 'Check your photos. Nothing is sent until you tap Upload. Previews are reduced in size; originals up to ' + s.maxOriginalMB + ' MB are uploaded in full quality.';
   if (s.albumUrl) $('albumLink').href = s.albumUrl;
 
   if (s.borderEnabled && s.borderStyle === 'corners') fetchCorners();
@@ -683,8 +756,8 @@ async function processItem(it, onStep) {
   // 2) Framed copy
   if (settings.borderEnabled && img && !it.framedDone) {
     onStep(0.6);
-    const canvas = drawFramed(img, FRAMED_MAX_SIDE, settings);
-    const data = canvas.toDataURL('image/jpeg', FRAMED_QUALITY);
+    const canvas = drawFramed(img, settings.framedMaxSide || FRAMED_MAX_SIDE, settings);
+    const data = canvas.toDataURL('image/jpeg', (settings.framedQuality || 88) / 100);
     canvas.width = canvas.height = 1;
     await sendUpload({ kind: 'framed', id: it.id, name: it.file.name, data: data });
     it.framedDone = true;
@@ -867,7 +940,7 @@ $('aPinBtn').onclick = async () => {
   } catch (e) { adminMsg(e.message || 'Could not change the PIN', 'err'); }
 };
 $('aLock').onclick = () => {
-  adminPin = null; $('a_newPin').value = ''; show('reviewOverlay', false); show('adminOverlay', false);
+  adminPin = null; $('a_newPin').value = ''; show('reviewOverlay', false); show('requestsOverlay', false); show('adminOverlay', false);
   RV.items = []; RV.sel.clear(); fetchSettings();
 };
 
@@ -1088,6 +1161,149 @@ function startSnow() {
   }
 }
 function stopSnow() { $('snow').textContent = ''; }
+
+// ============================ HELP TOOLTIPS ============================
+function showTip(h) {
+  const t = $('tip'); t.textContent = h.dataset.tip; t.classList.remove('hidden');
+  const r = h.getBoundingClientRect(), w = t.offsetWidth || 240, hh = t.offsetHeight || 60;
+  const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+  const below = r.bottom + 8 + hh < window.innerHeight;
+  t.style.left = left + 'px'; t.style.top = (below ? r.bottom + 8 : Math.max(8, r.top - hh - 8)) + 'px';
+}
+function hideTip() { $('tip').classList.add('hidden'); delete $('tip').dataset.for; }
+document.querySelectorAll('.help').forEach(h => {
+  h.addEventListener('mouseenter', () => showTip(h));
+  h.addEventListener('mouseleave', hideTip);
+  h.addEventListener('click', ev => {         // a tap on a phone; also stops the surrounding row from toggling its switch
+    ev.preventDefault(); ev.stopPropagation();
+    if ($('tip').dataset.for === h.dataset.tip) hideTip(); else { showTip(h); $('tip').dataset.for = h.dataset.tip; }
+  });
+});
+document.addEventListener('click', hideTip);
+window.addEventListener('scroll', hideTip, true);
+
+// ============================ COMMUNITY ALBUM (guests) ============================
+const AL = { items: [], cursor: null, busy: false };
+function reqList() { try { return JSON.parse(localStorage.getItem('pd_req') || '[]'); } catch (e) { return []; } }
+function reqAdd(id) {
+  const l = reqList(); if (l.indexOf(id) < 0) l.push(id);
+  try { localStorage.setItem('pd_req', JSON.stringify(l.slice(-200))); } catch (e) {}
+}
+function codeChanged(e) {                    // true when the server says the event code is needed again
+  if (!(e && e.needCode)) return false;
+  accessChecked = false; try { localStorage.removeItem('pd_token'); } catch (x) {}
+  showGate('The event code changed. Please enter it again.');
+  return true;
+}
+function mkBtn(text, secondary) {
+  const b = document.createElement('button'); b.type = 'button';
+  b.className = 'btn-main btn-small' + (secondary ? ' btn-secondary' : ''); b.style.width = '100%'; b.textContent = text; return b;
+}
+function alRender() {
+  const grid = $('alGrid'); grid.textContent = '';
+  AL.items.forEach(it => {
+    const card = document.createElement('div'); card.className = 'pcard'; card.style.cursor = 'pointer';
+    const img = document.createElement('img'); img.src = it.thumb; img.alt = ''; card.appendChild(img);
+    card.onclick = () => openViewer(it);
+    grid.appendChild(card);
+  });
+  show('alMore', !!AL.cursor);
+}
+async function alLoad(reset) {
+  if (AL.busy) return;
+  AL.busy = true;
+  if (reset) { AL.items = []; AL.cursor = null; alRender(); }
+  $('alStatus').textContent = 'Loading…';
+  try {
+    const r = await postJSON({ action: 'albumList', token: tokenStored(), cursor: reset ? null : AL.cursor }, 120000);
+    AL.items = AL.items.concat(r.items); AL.cursor = r.nextCursor || null;
+    $('alStatus').textContent = AL.items.length ? '' : 'No photos yet. Check back soon!';
+  } catch (e) { if (!codeChanged(e)) $('alStatus').textContent = e.message || 'Could not load the album'; }
+  AL.busy = false; alRender();
+}
+function viewerControls(it) {
+  const box = $('avControls'); box.textContent = '';
+  const mode = settings.downloadMode;
+  if (mode === 'anyone') {
+    const b = mkBtn('⬇️ Save photo'); b.onclick = () => saveAlbumPhoto(it, b); box.appendChild(b);
+  } else if (mode === 'request') {
+    if (reqList().indexOf(it.id) >= 0) { const p = document.createElement('div'); p.textContent = '✅ Request sent. The organizers will get in touch.'; box.appendChild(p); return; }
+    const inp = document.createElement('input'); inp.type = 'text'; inp.maxLength = 120; inp.placeholder = 'Your name or contact (optional)'; box.appendChild(inp);
+    const b = mkBtn('🙋 Request this photo'); b.onclick = () => sendRequest(it, inp.value, b); box.appendChild(b);
+  }
+}
+function openViewer(it) {
+  $('avImg').src = it.thumb; $('avStatus').textContent = '';
+  viewerControls(it); show('albumViewer', true);
+}
+function dataUrlToBlob(u) {
+  const i = u.indexOf(','), mime = u.slice(5, u.indexOf(';')), bin = atob(u.slice(i + 1)), arr = new Uint8Array(bin.length);
+  for (let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
+  return new Blob([arr], { type: mime });
+}
+async function saveAlbumPhoto(it, b) {
+  b.disabled = true; $('avStatus').textContent = 'Preparing your download…';
+  try {
+    const r = await postJSON({ action: 'albumPhoto', token: tokenStored(), id: it.id }, 180000);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(dataUrlToBlob(r.data)); a.download = r.name || 'photo.jpg';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    $('avStatus').textContent = 'Saved ✓ (a reduced-size copy with the event border)';
+  } catch (e) { if (!codeChanged(e)) $('avStatus').textContent = e.message || 'Could not download'; }
+  b.disabled = false;
+}
+async function sendRequest(it, note, b) {
+  b.disabled = true; $('avStatus').textContent = 'Sending…';
+  try {
+    await postJSON({ action: 'requestDownload', token: tokenStored(), id: it.id, note: note }, 60000);
+    reqAdd(it.id); $('avStatus').textContent = ''; viewerControls(it);
+  } catch (e) { if (!codeChanged(e)) $('avStatus').textContent = e.message || 'Could not send the request'; b.disabled = false; }
+}
+$('albumBtn').onclick = () => { show('albumOverlay', true); alLoad(true); };
+$('alClose').onclick = () => show('albumOverlay', false);
+$('alMore').onclick = () => alLoad(false);
+$('avClose').onclick = () => show('albumViewer', false);
+
+// ============================ DOWNLOAD REQUESTS (admin) ============================
+const RQ = { items: [], busy: false };
+function ago(t) {
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago';
+}
+function rqRender() {
+  const box = $('rqList'); box.textContent = '';
+  RQ.items.forEach(it => {
+    const row = document.createElement('div'); row.className = 'req' + (it.done ? ' done' : '');
+    if (it.thumb) { const im = document.createElement('img'); im.src = it.thumb; im.alt = ''; row.appendChild(im); }
+    else { const n = document.createElement('div'); n.className = 'noimg'; row.appendChild(n); }
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const t = document.createElement('div'); t.textContent = (it.note ? it.note : '(no name or contact given)') + ' · ' + ago(it.time); meta.appendChild(t);
+    const id = document.createElement('div'); id.className = 'note'; id.textContent = it.id; meta.appendChild(id);
+    const acts = document.createElement('div'); acts.className = 'acts';
+    const b1 = document.createElement('button'); b1.type = 'button'; b1.textContent = it.done ? '↩ Reopen' : '✔ Done';
+    b1.onclick = () => rqAct(it, it.done ? 'open' : 'done');
+    const b2 = document.createElement('button'); b2.type = 'button'; b2.textContent = '🗑 Delete';
+    b2.onclick = () => rqAct(it, 'delete');
+    acts.appendChild(b1); acts.appendChild(b2); meta.appendChild(acts); row.appendChild(meta); box.appendChild(row);
+  });
+}
+async function rqLoad() {
+  if (RQ.busy) return;
+  RQ.busy = true; $('rqStatus').textContent = 'Loading…';
+  try {
+    const r = await postJSON({ action: 'adminRequests', pin: adminPin }, 120000);
+    RQ.items = r.items;
+    $('rqStatus').textContent = r.items.length ? (r.total > r.items.length ? 'Showing ' + r.items.length + ' of ' + r.total : '') : 'No requests yet.';
+  } catch (e) { $('rqStatus').textContent = e.message || 'Could not load'; }
+  RQ.busy = false; rqRender();
+}
+async function rqAct(it, op) {
+  try { await postJSON({ action: 'adminRequestAct', pin: adminPin, rid: it.rid, op: op }, 30000); }
+  catch (e) { $('rqStatus').textContent = e.message || 'Something went wrong'; return; }
+  rqLoad();
+}
+$('rqOpen').onclick = () => { show('requestsOverlay', true); rqLoad(); };
+$('rqClose').onclick = () => show('requestsOverlay', false);
+$('rqRefresh').onclick = () => rqLoad();
 
 // ============================ START ============================
 try {   // first visit on this phone: keep the card hidden until the settings arrive (max 5 s)
