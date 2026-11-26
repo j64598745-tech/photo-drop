@@ -149,6 +149,13 @@
   #avControls input { width:100%; padding:11px; border-radius:10px; border:1px solid #666; background:#222; color:#fff; font-size:.95rem; margin-bottom:8px; }
   #avControls .btn-main { margin-top:0; }
 
+  .warn { background:#fff4e5; color:#7a4100; border:1px solid #f5b971; padding:10px 12px; border-radius:10px; font-size:.88rem; margin:8px 0; line-height:1.4; }
+  [data-theme="dark"] .warn { background:#3a2a10; color:#ffd9a0; border-color:#8a5a1a; }
+  .topmsg { font-size:.95rem; font-weight:700; margin:6px 0; }
+  .topmsg:empty { display:none; }
+  .topmsg.ok { color:var(--accent); }
+  .topmsg.err { color:var(--error); }
+
   /* Event code screen */
   .gate-card { max-width:360px; margin:12vh auto 0; padding:28px 24px; text-align:center; }
   #gateErr { font-size:.9rem; min-height:1.2em; margin-top:8px; color:var(--error); font-weight:600; }
@@ -290,6 +297,8 @@
 
   <div class="sheet hidden" id="adminPanel">
     <h3>Admin settings</h3>
+    <div id="aTop" class="topmsg"></div>
+    <div id="aWarn" class="warn hidden"></div>
     <button class="btn-main btn-small" id="rvOpen" type="button" style="width:100%">🗂️ Review photos (approve / reject)</button>
     <button class="btn-main btn-secondary btn-small" id="rqOpen" type="button" style="width:100%;margin-top:8px">🙋 Download requests</button>
 
@@ -411,6 +420,7 @@
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwSM1yADjc8KzI-BlqjStJCYlRGo035g5YQ3Nifo2PQR92XNsGoiLpAZUmNKG2iRv_L8g/exec';
 
 const MB = 1024 * 1024;
+const NEED_SERVER = 6;            // the page needs Apps Script code at least this version (see SERVER_VERSION in code.gs)
 const FRAMED_MAX_SIDE = 2400;     // longest side of the photo inside the frame (px)
 const FRAMED_QUALITY = 0.88;
 const BIG_RESIZE_SIDE = 4000;     // used only when an original is above the size limit
@@ -496,7 +506,11 @@ async function postJSON(body, timeoutMs) {
     const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), signal: ctrl.signal });
     let json;
     try { json = await res.json(); } catch (e) { throw new Error('Server busy, please retry'); }
-    if (!json.ok) { const err = new Error(json.error || 'Request failed'); err.fatal = true; err.needCode = !!json.needCode; throw err; }
+    if (!json.ok) {
+      const old = json.error === 'Unknown action.';          // the Apps Script on the server is older than this page
+      const err = new Error(old ? 'This feature is not available yet (the server needs updating). Please tell the organizers.' : (json.error || 'Request failed'));
+      err.fatal = true; err.needCode = !!json.needCode; err.oldServer = old; throw err;
+    }
     return json;
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('Timed out');
@@ -879,9 +893,10 @@ $('loginForm').onsubmit = async ev => {
 
 function fillAdmin(r) {
   const s = r.settings;
-  BOOL_KEYS.forEach(k => { $('a_' + k).checked = !!s[k]; });
-  TEXT_KEYS.forEach(k => { $('a_' + k).value = s[k] || ''; });
-  NUM_KEYS.forEach(k => { $('a_' + k).value = s[k]; });
+  BOOL_KEYS.forEach(k => { $('a_' + k).checked = s[k] === undefined ? !!DEFAULT_SETTINGS[k] : !!s[k]; });
+  TEXT_KEYS.forEach(k => { $('a_' + k).value = s[k] === undefined ? (DEFAULT_SETTINGS[k] || '') : (s[k] || ''); });
+  NUM_KEYS.forEach(k => { $('a_' + k).value = s[k] === undefined ? DEFAULT_SETTINGS[k] : s[k]; });
+  serverWarning(s);
   $('lnkInbox').href = r.inboxUrl; $('lnkFramed').href = r.framedUrl; $('lnkOriginals').href = r.originalsUrl; $('lnkAlbum').href = r.albumFolderUrl;
   $('aStorage').textContent = r.freeGB === null ? 'Drive: ' + r.usedGB + ' GB used (no limit reported)'
     : 'Drive: ' + r.usedGB + ' GB used, ' + r.freeGB + ' GB free of ' + r.limitGB + ' GB';
@@ -897,6 +912,23 @@ function collectAdmin() {
   return o;
 }
 function adminMsg(t, cls) { const m = $('aMsg'); m.textContent = t; m.className = cls || ''; }
+// Shows a warning at the top of the admin panel when the Apps Script is older than this page.
+function serverWarning(s) {
+  const old = !(Number(s && s.serverVersion) >= NEED_SERVER);
+  $('aWarn').textContent = old
+    ? '⚠️ Your Apps Script is older than this page, so the newer settings (album, downloads, framed size) cannot be saved. Paste the latest code.gs into Apps Script, then go to Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.'
+    : '';
+  show('aWarn', old);
+  return !old;
+}
+// Message at the TOP of the admin panel, and scroll there (used after Save).
+let topTimer = null;
+function topMsg(t, cls) {
+  const m = $('aTop'); m.textContent = t; m.className = 'topmsg ' + (cls || '');
+  clearTimeout(topTimer);
+  if (cls === 'ok') topTimer = setTimeout(() => { m.textContent = ''; }, 8000);
+  const o = $('adminOverlay'); if (o.scrollTo) o.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 function renderAdminPreview() {
   const sample = document.createElement('canvas'); sample.width = 800; sample.height = 600;
@@ -911,7 +943,7 @@ function renderAdminPreview() {
 });
 
 $('aSave').onclick = async () => {
-  adminMsg('Saving…'); $('aSave').disabled = true;
+  topMsg('Saving…'); $('aSave').disabled = true;
   try {
     const r = await postJSON({ action: 'adminSave', pin: adminPin, settings: collectAdmin(), accessCode: $('a_accessCode').value }, 30000);
     settings = Object.assign({}, DEFAULT_SETTINGS, r.settings);
@@ -919,8 +951,9 @@ $('aSave').onclick = async () => {
     $('a_accessCode').value = r.accessCode || '';
     if (r.token && settings.codeRequired) { try { localStorage.setItem('pd_token', r.token); } catch (e) {} accessChecked = true; show('gate', false); }
     applySettings();
-    adminMsg('Saved ✓ Guests will see the changes within a minute.', 'ok');
-  } catch (e) { adminMsg(e.message || 'Could not save', 'err'); }
+    if (serverWarning(r.settings)) topMsg('Saved ✓ Guests will see the changes within a minute.', 'ok');
+    else topMsg('Only part of the settings could be saved, because the Apps Script is out of date. See the warning below.', 'err');
+  } catch (e) { topMsg(e.message || 'Could not save', 'err'); }
   $('aSave').disabled = false;
 };
 $('aStatsBtn').onclick = async () => {
